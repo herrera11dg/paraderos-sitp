@@ -1,79 +1,34 @@
 <?php
-$baseUrl = "https://transport.opendatasoft.com/api/explore/v2.1/catalog/datasets/paraderos-sitp/records";
-$pageLimit = 100;
-$maxPages = 50;
-
 $localidades = [
-    "Usaquén" => ["lat_min" => 4.72, "lat_max" => 4.82, "lon_min" => -74.07, "lon_max" => -73.98],
-    "Chapinero" => ["lat_min" => 4.63, "lat_max" => 4.72, "lon_min" => -74.07, "lon_max" => -74.03],
-    "Santa Fe" => ["lat_min" => 4.59, "lat_max" => 4.63, "lon_min" => -74.08, "lon_max" => -74.04],
-    "San Cristóbal" => ["lat_min" => 4.55, "lat_max" => 4.60, "lon_min" => -74.10, "lon_max" => -74.05],
-    "Usme" => ["lat_min" => 4.45, "lat_max" => 4.56, "lon_min" => -74.15, "lon_max" => -74.08],
-    "Tunjuelito" => ["lat_min" => 4.54, "lat_max" => 4.59, "lon_min" => -74.15, "lon_max" => -74.10],
-    "Bosa" => ["lat_min" => 4.56, "lat_max" => 4.63, "lon_min" => -74.18, "lon_max" => -74.13],
-    "Kennedy" => ["lat_min" => 4.59, "lat_max" => 4.66, "lon_min" => -74.18, "lon_max" => -74.10],
-    "Fontibón" => ["lat_min" => 4.63, "lat_max" => 4.70, "lon_min" => -74.20, "lon_max" => -74.13],
-    "Engativá" => ["lat_min" => 4.67, "lat_max" => 4.76, "lon_min" => -74.16, "lon_max" => -74.08],
-    "Suba" => ["lat_min" => 4.70, "lat_max" => 4.80, "lon_min" => -74.13, "lon_max" => -74.03],
-    "Barrios Unidos" => ["lat_min" => 4.65, "lat_max" => 4.71, "lon_min" => -74.08, "lon_max" => -74.04],
-    "Teusaquillo" => ["lat_min" => 4.62, "lat_max" => 4.67, "lon_min" => -74.08, "lon_max" => -74.05],
-    "Los Mártires" => ["lat_min" => 4.59, "lat_max" => 4.63, "lon_min" => -74.10, "lon_max" => -74.07],
-    "Antonio Nariño" => ["lat_min" => 4.56, "lat_max" => 4.60, "lon_min" => -74.12, "lon_max" => -74.08],
-    "Puente Aranda" => ["lat_min" => 4.60, "lat_max" => 4.65, "lon_min" => -74.13, "lon_max" => -74.09],
-    "La Candelaria" => ["lat_min" => 4.59, "lat_max" => 4.61, "lon_min" => -74.08, "lon_max" => -74.06],
-    "Rafael Uribe Uribe" => ["lat_min" => 4.51, "lat_max" => 4.57, "lon_min" => -74.12, "lon_max" => -74.07],
-    "Ciudad Bolívar" => ["lat_min" => 4.44, "lat_max" => 4.53, "lon_min" => -74.17, "lon_max" => -74.10],
-    "Sumapaz" => ["lat_min" => 4.30, "lat_max" => 4.45, "lon_min" => -74.30, "lon_max" => -74.15],
+    "Usaquén", "Chapinero", "Santa Fe", "San Cristóbal", "Usme",
+    "Tunjuelito", "Bosa", "Kennedy", "Fontibón", "Engativá",
+    "Suba", "Barrios Unidos", "Teusaquillo", "Los Mártires", "Antonio Nariño",
+    "Puente Aranda", "La Candelaria", "Rafael Uribe Uribe", "Ciudad Bolívar", "Sumapaz",
 ];
 
 $localidadSel = isset($_GET['localidad']) ? $_GET['localidad'] : '';
-
-$total = 0;
+$total = null;
 $error = '';
 
-if ($localidadSel && isset($localidades[$localidadSel])) {
-    $bounds = $localidades[$localidadSel];
-    $offset = 0;
-    $page = 0;
+if ($localidadSel && in_array($localidadSel, $localidades)) {
+    $nombrePy = $localidadSel;
+    $nombrePy = str_replace(['á', 'é', 'í', 'ó', 'ú', 'ñ'], ['a', 'e', 'i', 'o', 'u', 'n'], $nombrePy);
 
-    try {
-        while ($page < $maxPages) {
-            $url = $baseUrl . "?limit=" . $pageLimit . "&offset=" . $offset . "&select=geopoint";
-            $ch = curl_init($url);
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-            $response = curl_exec($ch);
+    $script = __DIR__ . '/paraderos.py';
+    $comando = 'python "' . $script . '" "' . $nombrePy . '" 2>&1';
+    $salida = shell_exec($comando);
 
-            if (curl_errno($ch)) {
-                $error = "Error al conectar con la API: " . curl_error($ch);
-                curl_close($ch);
-                break;
-            }
-
-            $data = json_decode($response, true);
-            curl_close($ch);
-
-            if (!isset($data['results']) || empty($data['results'])) {
-                break;
-            }
-
-            foreach ($data['results'] as $item) {
-                $lat = $item['geopoint']['lat'] ?? null;
-                $lon = $item['geopoint']['lon'] ?? null;
-
-                if ($lat !== null && $lon !== null) {
-                    if ($lat >= $bounds['lat_min'] && $lat <= $bounds['lat_max'] &&
-                        $lon >= $bounds['lon_min'] && $lon <= $bounds['lon_max']) {
-                        $total++;
-                    }
-                }
-            }
-
-            $offset += $pageLimit;
-            $page++;
+    if ($salida === null) {
+        $error = "No se pudo ejecutar el script de Python. Verifique que Python este instalado.";
+    } else {
+        $datos = json_decode(trim($salida), true);
+        if ($datos === null) {
+            $error = "Error al procesar la respuesta de Python.";
+        } elseif (isset($datos['error'])) {
+            $error = $datos['error'];
+        } else {
+            $total = $datos['total'];
         }
-    } catch (Exception $e) {
-        $error = "Error: " . $e->getMessage();
     }
 }
 ?>
@@ -114,7 +69,7 @@ if ($localidadSel && isset($localidades[$localidadSel])) {
                 <label for="localidad">Seleccionar Localidad:</label>
                 <select name="localidad" id="localidad" required>
                     <option value="">-- Seleccione una localidad --</option>
-                    <?php foreach ($localidades as $nombre => $bounds): ?>
+                    <?php foreach ($localidades as $nombre): ?>
                         <option value="<?= htmlspecialchars($nombre) ?>" <?= $localidadSel === $nombre ? 'selected' : '' ?>>
                             <?= htmlspecialchars($nombre) ?>
                         </option>
@@ -128,13 +83,13 @@ if ($localidadSel && isset($localidades[$localidadSel])) {
             <div class="alert alert-error"><?= htmlspecialchars($error) ?></div>
         <?php endif; ?>
 
-        <?php if ($localidadSel && !$error): ?>
+        <?php if ($total !== null): ?>
             <div class="result">
                 <div class="localidad"><?= htmlspecialchars($localidadSel) ?></div>
                 <div class="number"><?= $total ?></div>
                 <div class="label">paraderos encontrados</div>
             </div>
-        <?php elseif (!$localidadSel): ?>
+        <?php elseif (!$localidadSel && !$error): ?>
             <div class="alert alert-info">Seleccione una localidad y presione "Buscar Paraderos".</div>
         <?php endif; ?>
     </div>
